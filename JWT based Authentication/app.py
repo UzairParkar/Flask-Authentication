@@ -37,8 +37,7 @@ class User(db.Model):
 class Note(db.Model):
     id = db.Column(db.Integer,primary_key = True)
     content  = db.Column(db.String(255),nullable = False)
-    user_id = db.Column(db.Integer,db.ForeignKey('user.id',ondelete="CASCADE"))
-
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete="CASCADE"), nullable=False)
     
 class NoteSchema(Schema):
     id = fields.Int(dump_only = True)
@@ -58,8 +57,8 @@ users_schema = Userschema(many= True)
 note_schema = NoteSchema()
 notes_schema = NoteSchema(many=True)
 
-# with app.app_context():
-#     db.create_all()
+with app.app_context():
+    db.create_all()
 
 def token_required(f):
     @wraps(f)
@@ -75,7 +74,11 @@ def token_required(f):
         try:
             data = jwt.decode(token,app.config['SECRET_KEY'],algorithms=['HS256'])
             current_user = User.query.filter_by(id = data['user_id']).first()
-        
+
+            if not current_user:
+                return jsonify({"Message": "Invalid token"}), 401
+
+            session['user_id'] = current_user.id
         except jwt.ExpiredSignatureError:
             return jsonify({"Message":"Token has expired"}), 401
 
@@ -131,9 +134,12 @@ def login():
     if not user or not user.verify_password(password):
         return jsonify({"Message":"Invalid credentials"}), 401
 
+    
+
     if user and user.verify_password(password):
         token = jwt.encode({"user_id":user.id, "exp": datetime.utcnow() + timedelta(minutes = 5)},app.config['SECRET_KEY'],algorithm = 'HS256')
         response = {"Message":'Logged in successfully', 'token':token}
+        session['user_id'] = user.id
 
         return jsonify(response),200
 
@@ -157,9 +163,11 @@ def createnote(current_user):
         return jsonify(errors),400
 
 
-    data['user_id'] = current_user.id
-
-    new_note = Note(**data)
+    new_note = Note(
+        content=data['content'],
+        user_id=current_user.id
+    )
+    
     db.session.add(new_note)
     db.session.commit()
 
@@ -206,6 +214,7 @@ def deletenote(current_user, note_id):
 @app.route('/logout',methods = ['POST'])
 @token_required
 def logout(current_user):
+    session.pop('user_id', None)
     token = request.headers.get('x-access-token')
     if token:
         token = None
