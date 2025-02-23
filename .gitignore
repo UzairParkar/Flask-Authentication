@@ -1,0 +1,16 @@
+__pycache__/
+.pyc
+.pyo
+
+# Flask instance folder (contains runtime data like SQLite DBs)
+instance/
+.db
+
+# Environment files
+.env/
+.env
+.venv/
+venv/
+
+# excel ignore
+~$*
